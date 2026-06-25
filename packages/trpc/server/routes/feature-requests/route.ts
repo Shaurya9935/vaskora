@@ -1,8 +1,9 @@
 import { router, protectedProcedure } from "../../trpc";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 
 import { db } from "../../../../database";
-import { featureRequest, workspace } from "../../../../database/schema";
+import { featureRequest, workspace, featureClarificationMessage } from "../../../../database/schema";
 import { inngest } from "@repo/services/ai/chatbot/client";
 
 export const featureRequestRouter = router({
@@ -40,13 +41,12 @@ export const featureRequestRouter = router({
       // 1. Save to Database
       const result = await db.insert(featureRequest).values({
         workspaceId,
-        // Ensure your context actually provides the user ID like this!
         userId: ctx.user.id,
         title: input.title,
         initialPrompt: input.prompt,
+        status: "pending",
       }).returning();
 
-      // 🛠️ FIX 3: Safely extract the first item to satisfy TypeScript's strict null checks
       const newRequest = result[0];
       if (!newRequest) {
         throw new Error("Failed to create feature request in database.");
@@ -60,6 +60,64 @@ export const featureRequestRouter = router({
 
       return newRequest;
     }),
-});
+
+  list: protectedProcedure
+    .query(async ({ ctx }) => {
+      return await db
+        .select()
+        .from(featureRequest)
+        .orderBy(featureRequest.createdAt);
+    }),
+
+  get: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const [request] = await db
+        .select()
+        .from(featureRequest)
+        .where(eq(featureRequest.id, input.id))
+        .limit(1);
+      return request || null;
+    }),
+
+  getMessages: protectedProcedure
+    .input(z.object({ featureRequestId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      return await db
+        .select()
+        .from(featureClarificationMessage)
+        .where(eq(featureClarificationMessage.featureRequestId, input.featureRequestId))
+        .orderBy(featureClarificationMessage.createdAt);
+    }),
+
+  sendReply: protectedProcedure
+    .input(z.object({
+      featureRequestId: z.string().uuid(),
+      content: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      // 1. Insert user message
+      const [newMessage] = await db
+        .insert(featureClarificationMessage)
+        .values({
+          featureRequestId: input.featureRequestId,
+          role: "user",
+          content: input.content,
+        })
+        .returning();
+
+      // 2. Update status of featureRequest back to 'pending' to show AI is working/thinking
+      await db
+        .update(featureRequest)
+        .set({ status: "pending" })
+        .where(eq(featureRequest.id, input.featureRequestId));
+
+      // 3. Send event to Inngest to wake up the workflow!
+      await inngest.send({
+        name: "feature.discovery.user_replied",
+        data: { featureRequestId: input.featureRequestId },
+      });
+
+      return newMessage;
     }),
 });
