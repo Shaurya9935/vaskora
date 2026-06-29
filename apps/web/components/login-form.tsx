@@ -19,7 +19,7 @@ import {
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
 import { signInWithGithub } from "@repo/services/auth/src/client";
-import { signInAsDeveloper } from "~/lib/auth-actions";
+// import { signInAsDeveloper } from "~/lib/auth-actions";
 import { useTransition } from "react";
 
 export function LoginForm({
@@ -28,11 +28,7 @@ export function LoginForm({
 }: React.ComponentProps<"div">) {
   const [isPending, startTransition] = useTransition();
 
-  const handleDevLogin = () => {
-    startTransition(async () => {
-      await signInAsDeveloper();
-    });
-  };
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
@@ -56,19 +52,9 @@ export function LoginForm({
                   Login with GitHub
                 </Button>
               </Field>
-              <Field>
-                <Button 
-                  variant="secondary" 
-                  type="button" 
-                  onClick={handleDevLogin} 
-                  disabled={isPending}
-                  className="rounded-xl font-bold bg-secondary text-secondary-foreground border border-border"
-                >
-                  {isPending ? "Signing in..." : "Login as Developer (Local Dev)"}
-                </Button>
-              </Field>
+              
 
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+              {/* <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
                 Or continue with
               </FieldSeparator>
               <Field>
@@ -97,7 +83,7 @@ export function LoginForm({
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <a href="#">Sign up</a>
                 </FieldDescription>
-              </Field>
+              </Field> */}
             </FieldGroup>
           </form>
         </CardContent>
